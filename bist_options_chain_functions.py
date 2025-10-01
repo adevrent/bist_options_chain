@@ -111,7 +111,7 @@ def get_asset_options_chain(date_ISO, stock_code, derivative_type="O", calendar=
     S = get_asset_price_on_date(date_ISO, stock_code)
     
     for contract, maturity_code in zip(df_asset.loc[:, "Contract"].values, df_asset.loc[:, "Maturity Code"].values):
-        month = int(maturity_code[:2].split("0")[-1])
+        month = int(maturity_code[:2])
         year = int("20" + maturity_code[2:])
         day = 1
         maturity_date_ISO = convert_datetype(ql.Date(day, month, year), "ISO")
@@ -119,7 +119,7 @@ def get_asset_options_chain(date_ISO, stock_code, derivative_type="O", calendar=
         maturity_date_ISO_bday = convert_datetype(last_bday_QL, "ISO")
         maturity_date_ISO_bday_array.append(maturity_date_ISO_bday)
 
-    df_asset.loc[:, "Maturity Date"] = pd.to_datetime(maturity_date_ISO_bday_array)
+    df_asset.loc[:, "Maturity Date"] = pd.to_datetime(maturity_date_ISO_bday_array).date
     df_asset.loc[:, "Spot Price"] = S
     df_asset["Strike"] = df_asset["Strike"].astype(float)
     df_asset = df_asset.sort_values(["Maturity Date", "Strike"])

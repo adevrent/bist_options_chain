@@ -5,3 +5,4 @@ openpyxl
 QuantLib
 scipy
 yfinance
+streamlit
