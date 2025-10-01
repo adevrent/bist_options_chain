@@ -193,24 +193,33 @@ if run:
     # Show full DataFrame
     st.dataframe(df_all, use_container_width=True)
 
-    # Export to Excel
+    # --- Export to Excel: keep TRADE DATE column, no index, IV as % ---
     buffer = io.BytesIO()
+
+    # Make sure TRADE DATE is the first column (optional but nice)
+    if "TRADE DATE" in df_all.columns:
+        ordered_cols = ["TRADE DATE"] + [c for c in df_all.columns if c != "TRADE DATE"]
+        df_to_write = df_all[ordered_cols].copy()
+    else:
+        df_to_write = df_all.copy()
+
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-        df_all.to_excel(writer, sheet_name="OptionsChain", index=False)
-        workbook  = writer.book
+        # Write exactly the displayed frame; DO NOT write the index
+        df_to_write.to_excel(writer, sheet_name="OptionsChain", index=False)
+
+        workbook = writer.book
         worksheet = writer.sheets["OptionsChain"]
 
-        # autosize all columns
-        for idx, col in enumerate(df_all.columns):
+        # Autosize columns
+        for idx, col in enumerate(df_to_write.columns):
             width = max(len(str(col)),
-                        min(50, int(df_all[col].astype(str).str.len().mean() + 6)))
+                        min(50, int(df_to_write[col].astype(str).str.len().mean() + 6)))
             worksheet.set_column(idx, idx, width)
 
-        # format "Implied Vol" column as percentage with 2 decimals
-        if "Implied Vol" in df_all.columns:
-            iv_col_idx = df_all.columns.get_loc("Implied Vol")
+        # Format Implied Vol as 0.00% (keeps the width we just set)
+        if "Implied Vol" in df_to_write.columns:
+            iv_col_idx = df_to_write.columns.get_loc("Implied Vol")
             percent_fmt = workbook.add_format({"num_format": "0.00%"})
-            # just reuse the width you computed above
             worksheet.set_column(iv_col_idx, iv_col_idx, None, percent_fmt)
 
     st.download_button(
