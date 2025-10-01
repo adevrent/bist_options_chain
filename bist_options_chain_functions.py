@@ -89,36 +89,57 @@ def convert_datetype(date, to_type):
     # If none of the above conditions match, raise an error.
     raise TypeError("Unsupported date type provided.")
 
+
 def get_last_business_day_of_month(date_ISO, calendar=ql.Turkey()):
     date_QL = convert_datetype(date_ISO, "QL")
     eom = ql.Date.endOfMonth(date_QL)
     last_bday_QL = calendar.adjust(eom, ql.Preceding)
     return last_bday_QL
 
+
 def get_asset_options_chain(date_ISO, stock_code, derivative_type="O", calendar=ql.Turkey()):
     year, month, day = date_ISO.split("-")
 
-    date_QL = convert_datetype(date_ISO, "QL")
-
     filename = "VIOP_GUNSONU_FIYATHACIM.M." + year + month + ".csv"
-    filepath = f"data\{filename}"
+    filepath = f"data\\{filename}"
 
     df_all_assets = pd.read_csv(filepath, header=1, sep=";")
     df_all_assets.set_index("TRADE DATE", inplace=True)
-    df_all_assets = df_all_assets.loc[date_ISO, :]
 
-    df_asset = df_all_assets[(stock_code + str(".E") == df_all_assets.loc[:, "UNDERLYING"]) & (df_all_assets.loc[:, "INSTRUMENT SERIES"].str[0] == derivative_type)]
-    df_asset = df_asset[df_asset.loc[:, "TRADED VALUE"] > 0]
+    # --- ensure we always have a DataFrame for the specific day ---
+    if date_ISO not in df_all_assets.index:
+        return pd.DataFrame()
+
+    day_slice = df_all_assets.loc[date_ISO, :]
+    if isinstance(day_slice, pd.Series):
+        df_all_assets_day = day_slice.to_frame().T
+    else:
+        df_all_assets_day = day_slice.copy()
+
+    # filter to the underlying & options only
+    df_asset = df_all_assets_day[
+        (df_all_assets_day["UNDERLYING"] == stock_code + ".E") &
+        (df_all_assets_day["INSTRUMENT SERIES"].str[0] == derivative_type)
+    ].copy()
+
+    # only with positive traded value
+    if "TRADED VALUE" not in df_asset.columns:
+        return pd.DataFrame()
+
+    df_asset = df_asset[df_asset["TRADED VALUE"] > 0]
+    if df_asset.empty:
+        return pd.DataFrame()
+
     df_asset = df_asset.loc[:, ["INSTRUMENT SERIES", "CLOSING PRICE", "TRADED VALUE"]]
     df_asset.columns = ["Contract", "Close Price", "Volume"]
-    
+
     if df_asset.empty:
         return pd.DataFrame()
 
     pattern = r'^[A-Z]_([A-Z]+?)E(\d{4})([CP])([\d.]+)$'
     df_asset[["Ticker", "Maturity Code", "Option Type", "Strike"]] = df_asset["Contract"].str.extract(pattern)
     df_asset.loc[:, "Maturity Date"] = None  # to be filled
-    
+
     df_asset = df_asset.dropna(subset=["Maturity Code", "Option Type", "Strike"])
     if df_asset.empty:
         return pd.DataFrame()
@@ -231,28 +252,37 @@ def create_options_chain(date_ISO, stock_code, r):  # wrapper function
     df_asset_iv = calc_iv_for_options_chain(df_asset, r)
     return df_asset_iv
 
+
 def create_multi_date_options_chain(dates_ISO, stock_code, r_array, add_next_bd=False, calendar=ql.Turkey()):
     list_of_dfs = []
     for date_ISO in dates_ISO:
-        # Earnings date
         r_today = r_array.loc[date_ISO, "r_cont"]
         df_asset_iv_today = create_options_chain(date_ISO, stock_code, r_today)
+
+        if df_asset_iv_today is None or df_asset_iv_today.empty:
+            continue
+
         df_asset_iv_today.loc[:, "Date"] = date_ISO
         list_of_dfs.append(df_asset_iv_today)
-        
+
         if add_next_bd:
-            # Next business day
             next_date_QL = convert_datetype(date_ISO, "QL")
             next_date_QL = calendar.advance(next_date_QL, ql.Period(1, ql.Days))
             next_date_ISO = convert_datetype(next_date_QL, "ISO")
-            
-            r_next = r_array.loc[next_date_ISO, "r_cont"]
-            df_asset_iv_next_day = create_options_chain(next_date_ISO, stock_code, r_next)
-            df_asset_iv_next_day.loc[:, "Date"] = next_date_ISO
-            list_of_dfs.append(df_asset_iv_next_day)
 
-    df_all = pd.concat(list_of_dfs).drop(columns=["Date", "Maturity Code"])
+            if next_date_ISO in r_array.index.strftime("%Y-%m-%d"):
+                r_next = r_array.loc[next_date_ISO, "r_cont"]
+                df_asset_iv_next_day = create_options_chain(next_date_ISO, stock_code, r_next)
+                if df_asset_iv_next_day is not None and not df_asset_iv_next_day.empty:
+                    df_asset_iv_next_day.loc[:, "Date"] = next_date_ISO
+                    list_of_dfs.append(df_asset_iv_next_day)
+
+    if not list_of_dfs:
+        return pd.DataFrame()
+
+    df_all = pd.concat(list_of_dfs).drop(columns=["Date", "Maturity Code"], errors="ignore")
     return df_all
+
 
 def get_business_days(start_date_ISO, end_date_ISO, calendar=ql.Turkey()):
     start_date_QL = convert_datetype(start_date_ISO, "QL")
