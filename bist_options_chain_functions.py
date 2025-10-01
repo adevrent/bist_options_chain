@@ -43,7 +43,16 @@ valid_datetypes = ["ISO", "datetime", "QL"]
 def get_asset_price_on_date(date_ISO, stock_code):
     start_date_dt = convert_datetype(date_ISO, "datetime")
     end_date_dt = start_date_dt + dt.timedelta(days=1)
-    return float(yf.download(stock_code + ".IS", start=start_date_dt, end=end_date_dt, auto_adjust=False)["Close"].values[0][0])
+    df = yf.download(
+        stock_code + ".IS",
+        start=start_date_dt,
+        end=end_date_dt,
+        auto_adjust=False,
+        progress=False,
+    )
+    if df.empty:
+        raise ValueError(f"yfinance returned no data for {stock_code}.IS on {date_ISO}")
+    return float(df["Close"].iloc[0])
 
 def convert_datetype(date, to_type):
     assert to_type in valid_datetypes, "Invalid to_date type"
