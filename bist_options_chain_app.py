@@ -213,16 +213,6 @@ if run:
             # just reuse the width you computed above
             worksheet.set_column(iv_col_idx, iv_col_idx, None, percent_fmt)
 
-st.download_button(
-    label="Excel'e Aktar",
-    data=buffer.getvalue(),
-    file_name=f"{stock_code.upper()}_{start_date_ISO}_{end_date_ISO}_options_chain.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    use_container_width=True,
-)
-
-
-
     st.download_button(
         label="Excel'e Aktar",
         data=buffer.getvalue(),
