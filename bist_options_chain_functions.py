@@ -102,10 +102,17 @@ def get_asset_options_chain(date_ISO, stock_code, derivative_type="O", calendar=
     df_asset = df_asset[df_asset.loc[:, "TRADED VALUE"] > 0]
     df_asset = df_asset.loc[:, ["INSTRUMENT SERIES", "CLOSING PRICE", "TRADED VALUE"]]
     df_asset.columns = ["Contract", "Close Price", "Volume"]
+    
+    if df_asset.empty:
+        return pd.DataFrame()
 
     pattern = r'^[A-Z]_([A-Z]+?)E(\d{4})([CP])([\d.]+)$'
     df_asset[["Ticker", "Maturity Code", "Option Type", "Strike"]] = df_asset["Contract"].str.extract(pattern)
     df_asset.loc[:, "Maturity Date"] = None  # to be filled
+    
+    df_asset = df_asset.dropna(subset=["Maturity Code", "Option Type", "Strike"])
+    if df_asset.empty:
+        return pd.DataFrame()
 
     maturity_date_ISO_bday_array = []
     S = get_asset_price_on_date(date_ISO, stock_code)
