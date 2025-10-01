@@ -196,22 +196,31 @@ if run:
     # Export to Excel
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-        df_all.to_excel(writer, sheet_name="OptionsChain")
-        workbook = writer.book
-        ws = writer.sheets["OptionsChain"]
-        # autosize
-        df_reset = df_all.reset_index()
-        for idx, col in enumerate(df_reset.columns):
-            width = max(len(str(col)), min(50, int(df_reset[col].astype(str).str.len().mean() + 6)))
-            ws.set_column(idx, idx, width)
+        df_all.to_excel(writer, sheet_name="OptionsChain", index=False)
+        workbook  = writer.book
+        worksheet = writer.sheets["OptionsChain"]
 
-        # format "Implied Vol" as percentage with 2 decimals
-        if "Implied Vol" in df_reset.columns:
-            iv_col_idx = df_reset.columns.get_loc("Implied Vol")
+        # autosize all columns
+        for idx, col in enumerate(df_all.columns):
+            width = max(len(str(col)),
+                        min(50, int(df_all[col].astype(str).str.len().mean() + 6)))
+            worksheet.set_column(idx, idx, width)
+
+        # format "Implied Vol" column as percentage with 2 decimals
+        if "Implied Vol" in df_all.columns:
+            iv_col_idx = df_all.columns.get_loc("Implied Vol")
             percent_fmt = workbook.add_format({"num_format": "0.00%"})
-            # reapply width but with the percent format
-            current_width = ws.colinfo[iv_col_idx]["width"]
-            ws.set_column(iv_col_idx, iv_col_idx, current_width, percent_fmt)
+            # just reuse the width you computed above
+            worksheet.set_column(iv_col_idx, iv_col_idx, None, percent_fmt)
+
+st.download_button(
+    label="Excel'e Aktar",
+    data=buffer.getvalue(),
+    file_name=f"{stock_code.upper()}_{start_date_ISO}_{end_date_ISO}_options_chain.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    use_container_width=True,
+)
+
 
 
     st.download_button(
