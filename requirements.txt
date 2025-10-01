@@ -6,3 +6,4 @@ QuantLib
 scipy
 yfinance
 streamlit
+xlsxwriter
