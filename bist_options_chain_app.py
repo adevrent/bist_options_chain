@@ -17,9 +17,9 @@ import QuantLib as ql
 import re
 
 # ---------------- App config ----------------
-st.set_page_config(page_title="VIOP Options Chain Tarihsel Verileri, Atakan Devrent", layout="wide")
-st.title("BIST VIOP Options Chain Tarihsel Verileri, Atakan Devrent")
-st.caption("Veriler https://datastore.borsaistanbul.com/ adresinden alınmıştır. (Eylül verileri henüz yayınlanmadığı için 2024-08-30 sonrası tarihlerde veri yoktur.)")
+st.set_page_config(page_title="BIST Options Chain (Online)", layout="wide")
+st.title("BIST Options Chain Analysis (Online Data)")
+st.caption("Veriler uzaktan (HTTP) okunur • Tam tablo + Excel indirme")
 
 # ---------------- Secrets / Config ----------------
 DATA_BASE_URL = st.secrets.get("DATA_BASE_URL", "").rstrip("/")
@@ -193,34 +193,16 @@ if run:
     # Show full DataFrame
     st.dataframe(df_all, use_container_width=True)
 
-    # --- Export to Excel: keep TRADE DATE column, no index, IV as % ---
+    # Export to Excel
     buffer = io.BytesIO()
-
-    # Make sure TRADE DATE is the first column (optional but nice)
-    if "TRADE DATE" in df_all.columns:
-        ordered_cols = ["TRADE DATE"] + [c for c in df_all.columns if c != "TRADE DATE"]
-        df_to_write = df_all[ordered_cols].copy()
-    else:
-        df_to_write = df_all.copy()
-
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-        # Write exactly the displayed frame; DO NOT write the index
-        df_to_write.to_excel(writer, sheet_name="OptionsChain", index=False)
-
-        workbook = writer.book
-        worksheet = writer.sheets["OptionsChain"]
-
-        # Autosize columns
-        for idx, col in enumerate(df_to_write.columns):
-            width = max(len(str(col)),
-                        min(50, int(df_to_write[col].astype(str).str.len().mean() + 6)))
-            worksheet.set_column(idx, idx, width)
-
-        # Format Implied Vol as 0.00% (keeps the width we just set)
-        if "Implied Vol" in df_to_write.columns:
-            iv_col_idx = df_to_write.columns.get_loc("Implied Vol")
-            percent_fmt = workbook.add_format({"num_format": "0.00%"})
-            worksheet.set_column(iv_col_idx, iv_col_idx, None, percent_fmt)
+        df_all.to_excel(writer, sheet_name="OptionsChain")
+        ws = writer.sheets["OptionsChain"]
+        # autosize
+        df_reset = df_all.reset_index()
+        for idx, col in enumerate(df_reset.columns):
+            width = max(len(str(col)), min(50, int(df_reset[col].astype(str).str.len().mean() + 6)))
+            ws.set_column(idx, idx, width)
 
     st.download_button(
         label="Excel'e Aktar",
