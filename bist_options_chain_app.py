@@ -19,7 +19,7 @@ import re
 # ---------------- App config ----------------
 st.set_page_config(page_title="VIOP Options Chain Tarihsel Verileri, Atakan Devrent", layout="wide")
 st.title("BIST VIOP Options Chain Tarihsel Verileri, Atakan Devrent")
-st.caption("Veriler https://datastore.borsaistanbul.com/ den alınmıştır.")
+st.caption("Veriler https://datastore.borsaistanbul.com/ adresinden alınmıştır.")
 
 # ---------------- Secrets / Config ----------------
 DATA_BASE_URL = st.secrets.get("DATA_BASE_URL", "").rstrip("/")
