@@ -17,9 +17,9 @@ import QuantLib as ql
 import re
 
 # ---------------- App config ----------------
-st.set_page_config(page_title="BIST Options Chain (Online)", layout="wide")
-st.title("BIST Options Chain Analysis (Online Data)")
-st.caption("Veriler uzaktan (HTTP) okunur • Tam tablo + Excel indirme")
+st.set_page_config(page_title="VIOP Options Chain Tarihsel Verileri, Atakan Devrent", layout="wide")
+st.title("BIST VIOP Options Chain Tarihsel Verileri, Atakan Devrent")
+st.caption("Veriler https://datastore.borsaistanbul.com/ den alınmıştır.")
 
 # ---------------- Secrets / Config ----------------
 DATA_BASE_URL = st.secrets.get("DATA_BASE_URL", "").rstrip("/")
