@@ -119,7 +119,13 @@ def get_asset_options_chain_online(date_ISO: str, stock_code: str, derivative_ty
 
     # spot from yfinance (you already do this) :contentReference[oaicite:6]{index=6}
     S = get_asset_price_on_date(date_ISO, stock_code)
-    df_asset.loc[:, "Spot Price"] = S
+    try:
+        df_asset.loc[:, "Spot Price"] = S
+    except ValueError as e:
+        print("Error assigning Spot Price:", e)
+        print("S:", S)
+        print("df_asset shape:", df_asset.shape)
+        df_asset.loc[:, "Spot Price"] = 1e-6  # Assign a very small number to avoid issues
 
     # cleanup
     df_asset["Strike"] = df_asset["Strike"].astype(float)
