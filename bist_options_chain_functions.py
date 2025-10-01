@@ -127,7 +127,15 @@ def get_asset_options_chain(date_ISO, stock_code, derivative_type="O", calendar=
         maturity_date_ISO_bday_array.append(maturity_date_ISO_bday)
 
     df_asset.loc[:, "Maturity Date"] = pd.to_datetime(maturity_date_ISO_bday_array).date
-    df_asset.loc[:, "Spot Price"] = S
+    
+    try:
+        df_asset.loc[:, "Spot Price"] = S
+    except ValueError as e:
+        print("Error assigning Spot Price:", e)
+        print("S:", S)
+        print("df_asset shape:", df_asset.shape)
+        df_asset.loc[:, "Spot Price"] = 1e-6  # Assign a very small number to avoid issues
+
     df_asset["Strike"] = df_asset["Strike"].astype(float)
     df_asset = df_asset.sort_values(["Maturity Date", "Strike"])
     return df_asset
