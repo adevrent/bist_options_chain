@@ -297,22 +297,19 @@ def get_business_days(start_date_ISO, end_date_ISO, calendar=ql.Turkey()):
     return bday_ISO_array
 
 
-# r_filepath = r"data\TLREFORANI_D.csv"
-# r_array = load_r_array(r_filepath)
-# # print(r_array)
+r_filepath = r"data\TLREFORANI_D.csv"
+r_array = load_r_array(r_filepath)
 
-# stock_code = "ASELS"
-# start_date_ISO = "2024-11-10"
-# end_date_ISO = "2025-08-30"
-# dates_ISO = get_business_days(start_date_ISO, end_date_ISO)
-# # print(dates_ISO)
+stock_code = "ASELS"
+start_date_ISO = "2025-08-01"
+end_date_ISO = "2025-08-30"
+dates_ISO = get_business_days(start_date_ISO, end_date_ISO)
 
-# df_asset_all_dates = get_asset_multi_day_options_chain(
-#     dates_ISO,
-#     stock_code,
-#     derivative_type="O",
-#     calendar=ql.Turkey()
-# )
+df_asset_all_dates = get_asset_multi_day_options_chain(
+    dates_ISO,
+    stock_code,
+    derivative_type="O"
+)
 
-# df_asset_all_dates_iv = calc_iv_for_options_chain(df_asset_all_dates, r_array)
-# print(df_asset_all_dates_iv)
+df_asset_all_dates_iv = calc_iv_for_options_chain(df_asset_all_dates, r_array)
+print(df_asset_all_dates_iv)
