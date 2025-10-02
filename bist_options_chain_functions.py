@@ -40,19 +40,31 @@ def load_r_array(r_filepath):
 
 valid_datetypes = ["ISO", "datetime", "QL"]
 
-def get_asset_price_on_date(date_ISO, stock_code):
-    start_date_dt = convert_datetype(date_ISO, "datetime")
-    end_date_dt = start_date_dt + dt.timedelta(days=1)
+
+def get_asset_price_on_dates(dates_ISO, stock_code):
+    start_date_ISO = dates_ISO[0]
+    end_date_ISO = dates_ISO[-1]
+    start_date_dt = convert_datetype(dates_ISO[0], "datetime")
+    end_date_dt = convert_datetype(dates_ISO[-1], "datetime")
     df = yf.download(
         stock_code + ".IS",
         start=start_date_dt,
-        end=end_date_dt,
+        end=end_date_dt + dt.timedelta(days=1),
         auto_adjust=False,
         progress=False,
     )
     if df.empty:
         raise ValueError(f"yfinance returned no data for {stock_code}.IS on {date_ISO}")
-    return float(df["Close"].iloc[0])
+    return df.loc[:, "Close"]
+
+def get_maturity_date_ISO_bday(maturity_code, calendar=ql.Turkey()):
+    month = int(maturity_code[:2])
+    year = int("20" + maturity_code[2:])
+    day = 1
+    first_day_of_month_ISO = convert_datetype(ql.Date(day, month, year), "ISO")
+    last_bday_QL = get_last_business_day_of_month(first_day_of_month_ISO)
+    maturity_date_ISO_bday = convert_datetype(last_bday_QL, "ISO")
+    return maturity_date_ISO_bday
 
 def convert_datetype(date, to_type):
     assert to_type in valid_datetypes, "Invalid to_date type"
@@ -97,78 +109,87 @@ def get_last_business_day_of_month(date_ISO, calendar=ql.Turkey()):
     return last_bday_QL
 
 
-def get_asset_options_chain(date_ISO, stock_code, derivative_type="O", calendar=ql.Turkey()):
-    year, month, day = date_ISO.split("-")
+def get_asset_multi_day_options_chain(dates_ISO, stock_code, derivative_type="O", calendar=ql.Turkey()):
+    S_array = get_asset_price_on_dates(dates_ISO, stock_code)
+    # print(S_array)
+    df_asset_all_dates = pd.DataFrame()
+    for date_ISO in dates_ISO:
+        year, month, day = date_ISO.split("-")
 
-    filename = "VIOP_GUNSONU_FIYATHACIM.M." + year + month + ".csv"
-    filepath = f"data\\{filename}"
+        filename = "VIOP_GUNSONU_FIYATHACIM.M." + year + month + ".csv"
+        filepath = f"data\\{filename}"
 
-    df_all_assets = pd.read_csv(filepath, header=1, sep=";")
-    df_all_assets.set_index("TRADE DATE", inplace=True)
+        df_all_assets = pd.read_csv(filepath, header=1, sep=";")
+        df_all_assets.set_index("TRADE DATE", inplace=True)
 
-    # --- ensure we always have a DataFrame for the specific day ---
-    if date_ISO not in df_all_assets.index:
-        return pd.DataFrame()
+        if date_ISO not in df_all_assets.index:
+            raise ValueError(f"No data for {date_ISO} in {filename}")
 
-    day_slice = df_all_assets.loc[date_ISO, :]
-    if isinstance(day_slice, pd.Series):
-        df_all_assets_day = day_slice.to_frame().T
-    else:
-        df_all_assets_day = day_slice.copy()
+        day_slice = df_all_assets.loc[date_ISO, :]
+        if isinstance(day_slice, pd.Series):
+            df_all_assets_day = day_slice.to_frame().T
+        else:
+            df_all_assets_day = day_slice.copy()
 
-    # filter to the underlying & options only
-    df_asset = df_all_assets_day[
-        (df_all_assets_day["UNDERLYING"] == stock_code + ".E") &
-        (df_all_assets_day["INSTRUMENT SERIES"].str[0] == derivative_type)
-    ].copy()
+        # filter to the underlying & options only
+        df_asset = df_all_assets_day[
+            (df_all_assets_day["UNDERLYING"] == stock_code + ".E") &
+            (df_all_assets_day["INSTRUMENT SERIES"].str[0] == derivative_type)
+        ].copy()
 
-    # only with positive traded value
-    if "TRADED VALUE" not in df_asset.columns:
-        return pd.DataFrame()
+        # only with positive traded value
+        if "TRADED VALUE" not in df_asset.columns:
+            raise ValueError(f"'TRADED VALUE' column not found in data for {date_ISO}")
 
-    df_asset = df_asset[df_asset["TRADED VALUE"] > 0]
-    if df_asset.empty:
-        return pd.DataFrame()
+        df_asset = df_asset[df_asset["TRADED VALUE"] > 0]
+        if df_asset.empty:
+            print(f"No options with positive traded value for {stock_code} on {date_ISO}")
+            continue
 
-    df_asset = df_asset.loc[:, ["INSTRUMENT SERIES", "CLOSING PRICE", "TRADED VALUE"]]
-    df_asset.columns = ["Contract", "Close Price", "Volume"]
+        df_asset = df_asset.loc[:, ["INSTRUMENT SERIES", "CLOSING PRICE", "TRADED VALUE"]]
+        df_asset.columns = ["Contract", "Close Price", "Volume"]
 
-    if df_asset.empty:
-        return pd.DataFrame()
+        pattern = r'^[A-Z]_([A-Z]+?)E(\d{4})([CP])([\d.]+)$'
+        df_asset[["Ticker", "Maturity Code", "Option Type", "Strike"]] = df_asset["Contract"].str.extract(pattern)
+        df_asset.loc[:, "Maturity Date"] = None  # to be filled
 
-    pattern = r'^[A-Z]_([A-Z]+?)E(\d{4})([CP])([\d.]+)$'
-    df_asset[["Ticker", "Maturity Code", "Option Type", "Strike"]] = df_asset["Contract"].str.extract(pattern)
-    df_asset.loc[:, "Maturity Date"] = None  # to be filled
+        df_asset = df_asset.dropna(subset=["Maturity Code", "Option Type", "Strike"])
+        if df_asset.empty:
+            raise ValueError(f"No valid options data after extraction for {stock_code} on {date_ISO}")
 
-    df_asset = df_asset.dropna(subset=["Maturity Code", "Option Type", "Strike"])
-    if df_asset.empty:
-        return pd.DataFrame()
+        maturity_date_ISO_bday_array = []
 
-    maturity_date_ISO_bday_array = []
-    S = get_asset_price_on_date(date_ISO, stock_code)
-    
-    for contract, maturity_code in zip(df_asset.loc[:, "Contract"].values, df_asset.loc[:, "Maturity Code"].values):
-        month = int(maturity_code[:2])
-        year = int("20" + maturity_code[2:])
-        day = 1
-        maturity_date_ISO = convert_datetype(ql.Date(day, month, year), "ISO")
-        last_bday_QL = get_last_business_day_of_month(maturity_date_ISO)
-        maturity_date_ISO_bday = convert_datetype(last_bday_QL, "ISO")
-        maturity_date_ISO_bday_array.append(maturity_date_ISO_bday)
+        if type(df_asset.loc[date_ISO, "Maturity Code"]) == str:
+            maturity_code = df_asset.loc[date_ISO, "Maturity Code"]
+            maturity_date_ISO_bday = get_maturity_date_ISO_bday(maturity_code, calendar)
+            maturity_date_ISO_bday_array.append(maturity_date_ISO_bday)
 
-    df_asset.loc[:, "Maturity Date"] = pd.to_datetime(maturity_date_ISO_bday_array).date
-    
-    try:
-        df_asset.loc[:, "Spot Price"] = S
-    except ValueError as e:
-        print("Error assigning Spot Price:", e)
-        print("S:", S)
-        print("df_asset shape:", df_asset.shape)
-        df_asset.loc[:, "Spot Price"] = 1e-6  # Assign a very small number to avoid issues
+        else:
+            for contract, maturity_code in zip(df_asset.loc[date_ISO, "Contract"].values, df_asset.loc[date_ISO, "Maturity Code"].values):
+                maturity_date_ISO_bday = get_maturity_date_ISO_bday(maturity_code, calendar)
+                maturity_date_ISO_bday_array.append(maturity_date_ISO_bday)
 
-    df_asset["Strike"] = df_asset["Strike"].astype(float)
-    df_asset = df_asset.sort_values(["Maturity Date", "Strike"])
-    return df_asset
+        if len(maturity_date_ISO_bday_array) == 1:
+            df_asset.loc[date_ISO, "Maturity Date"] = convert_datetype(maturity_date_ISO_bday_array[0], "datetime")
+        else:
+            df_asset.loc[date_ISO, "Maturity Date"] = pd.to_datetime(maturity_date_ISO_bday_array).date
+
+        try:
+            S = S_array.loc[date_ISO].values[0]
+            df_asset.loc[date_ISO, "Spot Price"] = S
+        except KeyError as e:
+            print("Error assigning Spot Price:", e)
+            print("S:", S)
+            print("df_asset shape:", df_asset.shape)
+
+        df_asset["Strike"] = df_asset["Strike"].astype(float)
+
+        # print(df_asset.dtypes)
+
+        # df_asset = df_asset.sort_values(["Maturity Date", "Strike"])
+        df_asset_all_dates = pd.concat([df_asset_all_dates, df_asset])
+        # print(df_asset_all_dates)
+    return df_asset_all_dates
 
 def calc_d1(f, K, sigma, tau):
     """
@@ -200,7 +221,7 @@ def BS(phi, S, K, r, sigma, tau):
 
     v = phi * np.exp(-r * tau) * (S * ss.norm.cdf(phi * d1) - K * ss.norm.cdf(phi * d2))
     delta_S = phi * ss.norm.cdf(phi * d1)
-    
+
     # print("phi:", phi, " S:", S, " K:", K, " r:", r, " sigma:", sigma, " tau:", tau)
 
     return {"v":v, "delta_S":delta_S}
@@ -209,9 +230,9 @@ def get_iv_from_price(v, S, K, r, phi, tau, eps=1e-6, max_iter=10000):
     def f(sigma):
         BS_v = BS(phi, S, K, r, sigma, tau)["v"]
         return BS_v - v
-    
+
     a, b = 1e-6, 1.0
-    
+
     try:
         res = root_scalar(f, method="brentq", bracket=[a, b], xtol=eps, maxiter=max_iter)
         return np.maximum(res.root, 1e-12)
@@ -223,70 +244,49 @@ def get_iv_from_price(v, S, K, r, phi, tau, eps=1e-6, max_iter=10000):
         # f_array = np.vectorize(f)(sigma_array)
         # plt.plot(sigma_array, f_array)
         # plt.axhline(0, color='red', linestyle='--')
+        return np.nan
         return 0.001
 
-def calc_iv_for_options_chain(df_asset, r, S=None):
-    iv_array = []
-    df_asset_iv = df_asset.copy()
-    if S is None:
-        S = df_asset_iv.loc[:, "Spot Price"].values[0]
-        # print(S)
-    for row in df_asset_iv.iterrows():
+
+def calc_iv_for_options_chain(df_asset_all_dates, r_array):
+    iv_dict = {}
+    df_asset_all_dates_iv = df_asset_all_dates.copy()
+
+    for trade_date, row in df_asset_all_dates_iv.iterrows():
+        # print(trade_date)
+        # print(row)
         # print("Today Date:", row[0])
         # print("Maturity Date:", row[-1]["Maturity Date"])
-        v = row[-1]["Close Price"]
-        phi = 1 if row[-1]["Option Type"] == "C" else -1
-        K = row[-1]["Strike"]
-        today_QL = convert_datetype(row[0], "QL")
-        maturity_QL = convert_datetype(row[-1]["Maturity Date"], "QL")
-        tau = ql.Actual365Fixed().yearFraction(today_QL, maturity_QL)
+        maturity_date = row.loc["Maturity Date"]
+        r = r_array.loc[trade_date, "r_cont"]
+        v = row.loc["Close Price"]
+        phi = 1 if row.loc["Option Type"] == "C" else -1
+        K = row.loc["Strike"]
+        trade_QL = convert_datetype(trade_date, "QL")
+        maturity_QL = convert_datetype(maturity_date, "QL")
+        tau = ql.Actual365Fixed().yearFraction(trade_QL, maturity_QL)
+        S = row.loc["Spot Price"]
 
         iv = get_iv_from_price(v, S, K, r, phi, tau)
-        iv_array.append(iv)
+        if trade_date not in iv_dict:
+            iv_dict[trade_date] = []
+        iv_dict[trade_date].append(iv)
 
-    df_asset_iv.loc[:, "Implied Vol"] = iv_array
-    return df_asset_iv
+    df_asset_all_dates_iv.loc[:, "Implied Volatility"] = np.nan
+    for trade_date, iv_list in iv_dict.items():
+        df_asset_all_dates_iv.loc[trade_date, "Implied Volatility"] = iv_list
 
-def create_options_chain(date_ISO, stock_code, r):  # wrapper function
-    df_asset = get_asset_options_chain(date_ISO, stock_code)
+    return df_asset_all_dates_iv
+
+def create_options_chain_with_iv(df_asset, r):  # wrapper function
     df_asset_iv = calc_iv_for_options_chain(df_asset, r)
     return df_asset_iv
-
-
-def create_multi_date_options_chain(dates_ISO, stock_code, r_array, add_next_bd=False, calendar=ql.Turkey()):
-    list_of_dfs = []
-    for date_ISO in dates_ISO:
-        r_today = r_array.loc[date_ISO, "r_cont"]
-        df_asset_iv_today = create_options_chain(date_ISO, stock_code, r_today)
-
-        if df_asset_iv_today is None or df_asset_iv_today.empty:
-            continue
-
-        df_asset_iv_today.loc[:, "Date"] = date_ISO
-        list_of_dfs.append(df_asset_iv_today)
-
-        if add_next_bd:
-            next_date_QL = convert_datetype(date_ISO, "QL")
-            next_date_QL = calendar.advance(next_date_QL, ql.Period(1, ql.Days))
-            next_date_ISO = convert_datetype(next_date_QL, "ISO")
-
-            if next_date_ISO in r_array.index.strftime("%Y-%m-%d"):
-                r_next = r_array.loc[next_date_ISO, "r_cont"]
-                df_asset_iv_next_day = create_options_chain(next_date_ISO, stock_code, r_next)
-                if df_asset_iv_next_day is not None and not df_asset_iv_next_day.empty:
-                    df_asset_iv_next_day.loc[:, "Date"] = next_date_ISO
-                    list_of_dfs.append(df_asset_iv_next_day)
-
-    if not list_of_dfs:
-        return pd.DataFrame()
-
-    df_all = pd.concat(list_of_dfs).drop(columns=["Date", "Maturity Code"], errors="ignore")
-    return df_all
 
 
 def get_business_days(start_date_ISO, end_date_ISO, calendar=ql.Turkey()):
     start_date_QL = convert_datetype(start_date_ISO, "QL")
     end_date_QL = convert_datetype(end_date_ISO, "QL")
+    # print("end_date_QL:", end_date_QL)
     bday_QL_array = []
     current_date_QL = start_date_QL
     while current_date_QL <= end_date_QL:
@@ -295,3 +295,24 @@ def get_business_days(start_date_ISO, end_date_ISO, calendar=ql.Turkey()):
         current_date_QL = current_date_QL + ql.Period(1, ql.Days)
     bday_ISO_array = [convert_datetype(d, "ISO") for d in bday_QL_array]
     return bday_ISO_array
+
+
+# r_filepath = r"data\TLREFORANI_D.csv"
+# r_array = load_r_array(r_filepath)
+# # print(r_array)
+
+# stock_code = "ASELS"
+# start_date_ISO = "2024-11-10"
+# end_date_ISO = "2025-08-30"
+# dates_ISO = get_business_days(start_date_ISO, end_date_ISO)
+# # print(dates_ISO)
+
+# df_asset_all_dates = get_asset_multi_day_options_chain(
+#     dates_ISO,
+#     stock_code,
+#     derivative_type="O",
+#     calendar=ql.Turkey()
+# )
+
+# df_asset_all_dates_iv = calc_iv_for_options_chain(df_asset_all_dates, r_array)
+# print(df_asset_all_dates_iv)
