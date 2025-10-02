@@ -47,7 +47,7 @@ def _build_tlref_url() -> str:
     if not base:
         st.error("Secrets içinde DATA_BASE_URL bulunamadı.")
         st.stop()
-    r_filepath = "data/TLREFORANI_D.csv"
+    r_filepath = "TLREFORANI_D.csv"
     return f"{base}/{r_filepath}"
 
 # ---------------- Run ----------------
