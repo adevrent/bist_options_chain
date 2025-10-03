@@ -38,6 +38,7 @@ def load_r_array(r_filepath):
 
     return r_array
 
+
 valid_datetypes = ["ISO", "datetime", "QL"]
 
 
@@ -54,7 +55,8 @@ def get_asset_price_on_dates(dates_ISO, stock_code):
         progress=False,
     )
     if df.empty:
-        raise ValueError(f"yfinance returned no data for {stock_code}.IS on {date_ISO}")
+        raise ValueError(f"yfinance returned no data for {stock_code}.IS between {start_date_ISO} and {end_date_ISO}")
+
     return df.loc[:, "Close"]
 
 def get_maturity_date_ISO_bday(maturity_code, calendar=ql.Turkey()):
@@ -109,15 +111,18 @@ def get_last_business_day_of_month(date_ISO, calendar=ql.Turkey()):
     return last_bday_QL
 
 
-def get_asset_multi_day_options_chain(dates_ISO, stock_code, derivative_type="O", calendar=ql.Turkey()):
+def get_asset_multi_day_options_chain(dates_ISO, stock_code, derivative_type="O", calendar=ql.Turkey(), base_url=None):
     S_array = get_asset_price_on_dates(dates_ISO, stock_code)
     # print(S_array)
     df_asset_all_dates = pd.DataFrame()
     for date_ISO in dates_ISO:
         year, month, day = date_ISO.split("-")
 
-        filename = "VIOP_GUNSONU_FIYATHACIM.M." + year + month + ".csv"
-        filepath = f"data\\{filename}"
+        filename = f"VIOP_GUNSONU_FIYATHACIM.M.{year}{month}.csv"
+        if base_url:  # read from GitHub raw
+            filepath = f"{base_url.rstrip('/')}/{filename}"
+        else:         # fallback local
+            filepath = f"data/{filename}"
 
         df_all_assets = pd.read_csv(filepath, header=1, sep=";")
         df_all_assets.set_index("TRADE DATE", inplace=True)
@@ -297,19 +302,19 @@ def get_business_days(start_date_ISO, end_date_ISO, calendar=ql.Turkey()):
     return bday_ISO_array
 
 
-r_filepath = r"data\TLREFORANI_D.csv"
-r_array = load_r_array(r_filepath)
+# r_filepath = r"data\TLREFORANI_D.csv"
+# r_array = load_r_array(r_filepath)
 
-stock_code = "ASELS"
-start_date_ISO = "2025-08-01"
-end_date_ISO = "2025-08-30"
-dates_ISO = get_business_days(start_date_ISO, end_date_ISO)
+# stock_code = "ASELS"
+# start_date_ISO = "2025-08-01"
+# end_date_ISO = "2025-08-30"
+# dates_ISO = get_business_days(start_date_ISO, end_date_ISO)
 
-df_asset_all_dates = get_asset_multi_day_options_chain(
-    dates_ISO,
-    stock_code,
-    derivative_type="O"
-)
+# df_asset_all_dates = get_asset_multi_day_options_chain(
+#     dates_ISO,
+#     stock_code,
+#     derivative_type="O"
+# )
 
-df_asset_all_dates_iv = calc_iv_for_options_chain(df_asset_all_dates, r_array)
-print(df_asset_all_dates_iv)
+# df_asset_all_dates_iv = calc_iv_for_options_chain(df_asset_all_dates, r_array)
+# print(df_asset_all_dates_iv)

@@ -39,17 +39,12 @@ def _clean_iso(d: str) -> str:
     return d
 
 def _build_tlref_url() -> str:
-    """
-    r_filepath = 'data/TLREFORANI_D.csv' under your repo.
-    Load via DATA_BASE_URL from Streamlit secrets.
-    """
     base = st.secrets.get("DATA_BASE_URL", "").rstrip("/")
-    filename = "/TLREFORANI_D.csv"
+    fname = st.secrets.get("TLREF_FILENAME", "TLREFORANI_D.csv")
     if not base:
         st.error("Secrets içinde DATA_BASE_URL bulunamadı.")
         st.stop()
-    r_filepath = base + filename
-    return f"{base}/{r_filepath}"
+    return f"{base}/{fname}"
 
 # ---------------- Run ----------------
 if run:
@@ -66,6 +61,9 @@ if run:
     # 1) TLREF'i URL'den yükle (aynı şekilde yerelinizdeki load_r_array çağrısı)
     with st.spinner("TLREF verisi yükleniyor..."):
         tlref_url = _build_tlref_url()
+        # infer base URL once for monthly files (it’s the directory of TLREF)
+        base_url = st.secrets["DATA_BASE_URL"].rstrip("/")
+
         r_array = load_r_array(tlref_url)
 
     # 2) İş günleri aralığı
@@ -78,6 +76,7 @@ if run:
             dates_ISO,
             stock_code,
             derivative_type="O",
+            base_url=base_url
         )
 
     if df_asset_all_dates is None or df_asset_all_dates.empty:
