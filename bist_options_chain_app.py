@@ -44,10 +44,11 @@ def _build_tlref_url() -> str:
     Load via DATA_BASE_URL from Streamlit secrets.
     """
     base = st.secrets.get("DATA_BASE_URL", "").rstrip("/")
+    filename = "/TLREFORANI_D.csv"
     if not base:
         st.error("Secrets içinde DATA_BASE_URL bulunamadı.")
         st.stop()
-    r_filepath = "TLREFORANI_D.csv"
+    r_filepath = base + filename
     return f"{base}/{r_filepath}"
 
 # ---------------- Run ----------------
