@@ -21,7 +21,7 @@ st.caption("Veriler https://datastore.borsaistanbul.com/ den alınmıştır. 202
 c1, c2, c3 = st.columns(3)
 stock_code = c1.text_input("Hisse Kodu", value="", placeholder="örn. ASELS").strip().upper()
 start_date_raw = c2.text_input("Tarih Başlangıç", value="", placeholder="örn. 2025-08-04")
-end_date_raw   = c3.text_input("Tarih Bitiş", value="", placeholder="örn. 2025-08-30-11")
+end_date_raw   = c3.text_input("Tarih Bitiş", value="", placeholder="örn. 2025-08-11")
 
 run = st.button("Verileri Getir", use_container_width=True)
 
